@@ -7,7 +7,7 @@ kontroler przerwań. Zegar 100 MHz → DCM_SP → 50 MHz.
 | Adres | Co | Forth (po `hex`) |
 | --- | --- | --- |
 | `40` | LED D1..D8 (zapis/odczyt) | `55 40 io!` |
-| `80` | DIP, 1 = ON (bit 0 = pin C17) | `80 io@ .` |
+| `80` | DIP, 1 = ON (bit 0 = DP1 na nadruku, pin F17) | `80 io@ .` |
 | `90` | przyciski SW1..SW6, 1 = wciśnięty (SW1 to też reset) | `90 io@ .` |
 | `C0` / `D0` | timer A / B | |
 | `E0` | kontroler przerwań | |
@@ -66,10 +66,9 @@ mirror
   protokołem `j1term.py` i potem `1 2 + .` → `3`.
 - yosys `synth_xilinx -family xc6s`: ok. 880 LUT, 4 RAMB16, 10 RAM32M, DCM_SP, 2 BUFG.
 - **Niesprawdzone na płytce**: timing w ISE (50 MHz), kierunek i baud UART-u PIC-a
-  (19200 wg dokumentacji Numato), numeracja DIP-ów na nadruku.
+  (19200 wg dokumentacji Numato). Numeracja DIP-ów jak w NewHope/aht10 (DP1 = F17).
 
-## Do zrobienia / ćwiczenia z rozszerzeń
-- Wyświetlacz 7-seg (3 cyfry): piny A3, B4, A4, A5, C4, C5, D6, C6 (`7Seg_0..7`),
-  enable B3, A2, B2 (`7Seg_1en..3en`) — mapowanie na segmenty a..g/dp do ustalenia
-  na płytce; upstream ma gotowy kontroler `SSD`.
-- GPIO na złączach P6..P9 (`GPIO`, jak pmod w Nexys4).
+## Rozszerzenia
+Wersja z wyświetlaczem 7-seg (rejestr `0x60` + `SevenSegMux` z fpga-hw-lib) jest w
+FPGA-snake: `hw/demo/mimas_j1` — tam też wzorzec dokładania własnych peryferiów.
+Pozostałe pomysły: GPIO na złączach P6..P8 (`GPIO`, jak pmod w Nexys4; P9 to bank 1,8 V).

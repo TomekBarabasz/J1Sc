@@ -120,27 +120,7 @@ class J1MimasV2(j1Cfg : J1Config, boardCfg : CoreConfig) extends Component {
   }
   noIoPrefix()
 
-  // 100 MHz -> DCM_SP -> CLKDV = 50 MHz (CLK0 fed back through a BUFG)
-  val clkdv = 100e6 / boardCfg.coreFrequency.getValue.toBigDecimal.toDouble
-  require(Seq(1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0).contains(clkdv),
-          s"DCM_SP CLKDV_DIVIDE = $clkdv is not a legal value")
-  val dcm   = new DCM_SP(clkinPeriodNs = 10.0, clkdvDivide = clkdv)
-  val fbBuf = new BUFG
-  val dvBuf = new BUFG
-  dcm.CLKIN    := io.clk100
-  dcm.RST      := False
-  dcm.PSEN     := False
-  dcm.PSINCDEC := False
-  dcm.PSCLK    := False
-  dcm.DSSEN    := False
-  fbBuf.I      := dcm.CLK0
-  dcm.CLKFB    := fbBuf.O
-  dvBuf.I      := dcm.CLKDV
-
-  val coreCd = ClockDomain.internal(name = "core", frequency = boardCfg.coreFrequency)
-  coreCd.clock := dvBuf.O
-  coreCd.reset := coreCd(RegNext(ResetCtrl.asyncAssertSyncDeassert(input       = !io.btn_n(0) || !dcm.LOCKED,
-                                                                   clockDomain = coreCd)))
+  val coreCd = J1MimasV2.coreDomain(io.clk100, reset = !io.btn_n(0), boardCfg.coreFrequency)
 
   val core = coreCd(new J1MimasV2Soc(j1Cfg, boardCfg))
   core.io.dips    := ~io.dip_n
@@ -153,6 +133,32 @@ class J1MimasV2(j1Cfg : J1Config, boardCfg : CoreConfig) extends Component {
 
 object J1MimasV2 {
   val globalClockConfig = ClockDomainConfig(clockEdge = RISING, resetKind = SYNC, resetActiveLevel = HIGH)
+
+  /** Core clock domain of the Mimas V2: 100 MHz pin -> DCM_SP (CLKDV) -> BUFG,
+    * reset = `reset` (async assert, sync deassert) or DCM not locked.
+    * Call inside the board top; also used by derived tops (FPGA-snake demo/mimas_j1). */
+  def coreDomain(clk100 : Bool, reset : Bool, frequency : IClockDomainFrequency) : ClockDomain = {
+    val clkdv = 100e6 / frequency.getValue.toBigDecimal.toDouble
+    require(Seq(1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 7.5, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0).contains(clkdv),
+            s"DCM_SP CLKDV_DIVIDE = $clkdv is not a legal value")
+    val dcm   = new DCM_SP(clkinPeriodNs = 10.0, clkdvDivide = clkdv).setName("dcm")
+    val fbBuf = new BUFG().setName("fbBuf")
+    val dvBuf = new BUFG().setName("dvBuf")
+    dcm.CLKIN    := clk100
+    dcm.RST      := False
+    dcm.PSEN     := False
+    dcm.PSINCDEC := False
+    dcm.PSCLK    := False
+    dcm.DSSEN    := False
+    fbBuf.I      := dcm.CLK0
+    dcm.CLKFB    := fbBuf.O
+    dvBuf.I      := dcm.CLKDV
+
+    val cd = ClockDomain.internal(name = "core", frequency = frequency)
+    cd.clock := dvBuf.O
+    cd.reset := cd(RegNext(ResetCtrl.asyncAssertSyncDeassert(input = reset || !dcm.LOCKED, clockDomain = cd)))
+    cd
+  }
 
   def main(args : Array[String]) : Unit = {
     println("[J1Sc] Create the J1 for a Numato Mimas V2 board")
