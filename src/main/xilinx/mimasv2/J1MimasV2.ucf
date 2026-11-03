@@ -1,0 +1,48 @@
+# J1Sc on the Numato Mimas V2 (XC6SLX9-CSG324), top J1MimasV2.
+# Pins: Numato samplecode (MimasV2.ucf, mimasV2UartDemo) and the Mimas V2 schematic.
+CONFIG VCCAUX = "3.3" ;
+
+# 100 MHz oscillator -> DCM_SP -> 50 MHz core clock (constraint propagates through the DCM)
+NET "clk100"     LOC = V10 | IOSTANDARD = LVCMOS33 ;
+NET "clk100"     TNM_NET = "clk100" ;
+TIMESPEC "TS_clk100" = PERIOD "clk100" 10 ns HIGH 50% ;
+
+# UART to the onboard PIC (USB CDC, 19200 baud). Slide switch SW7 must be in UART position.
+# Schematic: PIC TX -> net "TX" -> A8 (FPGA input), PIC RX <- net "RX" <- B8 (FPGA output)
+NET "uart_rx"    LOC = A8  | IOSTANDARD = LVCMOS33 | PULLUP ;
+NET "uart_tx"    LOC = B8  | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = SLOW ;
+
+# Push buttons SW1..SW6, active low. SW1 = reset.
+NET "btn_n[0]"   LOC = M18 | IOSTANDARD = LVCMOS33 | PULLUP ;   # SW1 (reset)
+NET "btn_n[1]"   LOC = L18 | IOSTANDARD = LVCMOS33 | PULLUP ;   # SW2
+NET "btn_n[2]"   LOC = M16 | IOSTANDARD = LVCMOS33 | PULLUP ;   # SW3
+NET "btn_n[3]"   LOC = L17 | IOSTANDARD = LVCMOS33 | PULLUP ;   # SW4
+NET "btn_n[4]"   LOC = K17 | IOSTANDARD = LVCMOS33 | PULLUP ;   # SW5
+NET "btn_n[5]"   LOC = K18 | IOSTANDARD = LVCMOS33 | PULLUP ;   # SW6
+
+# DIP switch, active low (ON = 0 on the pin, 1 in Forth at 0x80). Order = schematic nets
+# DP1..DP8 and Numato's DPSwitch[0..7]; voice-changer's UCF labels C17 as "DP 8", so the
+# silkscreen may be numbered the other way - check on the board (bit 0 = pin C17).
+NET "dip_n[0]"   LOC = C17 | IOSTANDARD = LVCMOS33 | PULLUP ;   # net DP1
+NET "dip_n[1]"   LOC = C18 | IOSTANDARD = LVCMOS33 | PULLUP ;   # net DP2
+NET "dip_n[2]"   LOC = D17 | IOSTANDARD = LVCMOS33 | PULLUP ;   # net DP3
+NET "dip_n[3]"   LOC = D18 | IOSTANDARD = LVCMOS33 | PULLUP ;   # net DP4
+NET "dip_n[4]"   LOC = E18 | IOSTANDARD = LVCMOS33 | PULLUP ;   # net DP5
+NET "dip_n[5]"   LOC = E16 | IOSTANDARD = LVCMOS33 | PULLUP ;   # net DP6
+NET "dip_n[6]"   LOC = F18 | IOSTANDARD = LVCMOS33 | PULLUP ;   # net DP7
+NET "dip_n[7]"   LOC = F17 | IOSTANDARD = LVCMOS33 | PULLUP ;   # net DP8
+
+# LEDs D1..D8, active high
+NET "led[0]"     LOC = P15 | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = SLOW ;   # D1
+NET "led[1]"     LOC = P16 | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = SLOW ;   # D2
+NET "led[2]"     LOC = N15 | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = SLOW ;   # D3
+NET "led[3]"     LOC = N16 | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = SLOW ;   # D4
+NET "led[4]"     LOC = U17 | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = SLOW ;   # D5
+NET "led[5]"     LOC = U18 | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = SLOW ;   # D6
+NET "led[6]"     LOC = T17 | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = SLOW ;   # D7
+NET "led[7]"     LOC = T18 | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = SLOW ;   # D8
+
+# Asynchronous inputs: synchronised / debounced in the design
+NET "btn_n[*]"   TIG ;
+NET "dip_n[*]"   TIG ;
+NET "uart_rx"    TIG ;

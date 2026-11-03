@@ -35,6 +35,11 @@ i nextpnr przejdzie do Makefile'i (jak w FPGA-snake).
 Zajętość (yosys + nextpnr-ice40, UP5K): cały SoC `J1Ice` (CPU, 4 k słów RAM z
 Forthem, UART, timery, PWM, LED-y, przyciski, JTAG) — 2 009 / 5 280 LC, 18 / 30 EBR.
 
+## Numato Mimas V2 (J1 + SwapForth + UART)
+`boards/hw/spinal/main/J1MimasV2.scala` (SoC `J1MimasV2Soc` + top z DCM), UCF i instrukcja:
+`src/main/xilinx/mimasv2/`. Terminal/loader dla PC: `toolchain/forth/j1term.py` (Python 3).
+Test end-to-end w symulacji: `sbt "boards/testOnly j1sc.boards.J1MimasV2SocTest"`.
+
 ## Jako submodule
 ```
 git submodule add -b newhope https://github.com/TomekBarabasz/J1Sc hw/cpu/j1
@@ -47,8 +52,8 @@ lazy val snake = (...).dependsOn(j1)
 scalaVersion w obu buildach musi być ta sama (`build.sbt` tutaj vs `HwBuild.scala`).
 
 ## Do zrobienia
-- ROM z firmware przez `inlineRom` zamiast `$readmemb` (pliki `.bin` obok `.v`,
-  workaround z kopiowaniem w upstreamie).
+- ROM z firmware w .v: zrobione dla J1MimasV2 (`InlineReadmem` po generacji);
+  J1Ice/J1Ico/J1Nexys4X dalej z `$readmemb`.
 - `bootCode` z pliku firmware bez `sys.exit` przy braku pliku (dziś `forth16`
   zabija JVM, gdy `nuc.binary` nie ma).
 - Top-levele dla Tang Nano 9K i iCESugar (w FPGA-snake albo w `boards/`).

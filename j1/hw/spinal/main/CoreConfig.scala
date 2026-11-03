@@ -269,6 +269,19 @@ case class J1UARTConfig (clockDividerWidth : Int,
 
 object J1UARTConfig {
 
+  // Numato Mimas V2: USB-UART bridge in the onboard PIC runs at 19200 baud
+  def mimasV2Uart(baudrate : Int = 19200) : J1UARTConfig = J1UARTConfig(clockDividerWidth = 20,
+                                                                         dataWidthMax      = 8,
+                                                                         baudrate          = baudrate,
+                                                                         dataLength        = 7,
+                                                                         parity            = UartParityType.NONE,
+                                                                         stop              = UartStopType.ONE,
+                                                                         preSamplingSize   = 1,
+                                                                         samplingSize      = 5,
+                                                                         postSamplingSize  = 2,
+                                                                         fifoDepth         = 8)
+
+
   // Provide a default configuration
   def default : J1UARTConfig = {
 
@@ -340,6 +353,20 @@ case class CoreConfig(gpioConfig    : GPIOConfig,
                       ioWaitStates  : Int)
 
 object CoreConfig {
+
+  // Numato Mimas V2 (Spartan-6 XC6SLX9): 8 LEDs, 8 DIP switches, 6 push buttons,
+  // UART over the onboard PIC (19200 baud), core clock 50 MHz from a DCM.
+  // No PWM, seven-segment display or GPIO yet.
+  def mimasV2(baudrate : Int = 19200) : CoreConfig = CoreConfig(gpioConfig    = GPIOConfig.pmod,
+                                                                 ledBankConfig = LEDArrayConfig(width = 8, lowActive = false),
+                                                                 pwmConfig     = null,
+                                                                 ssdConfig     = null,
+                                                                 sSwitchConfig = DBPinArrayConfig(waitTime = 1 ms, numOfPins = 8),
+                                                                 pButtonConfig = DBPinArrayConfig(waitTime = 5 ms, numOfPins = 6),
+                                                                 uartConfig    = J1UARTConfig.mimasV2Uart(baudrate),
+                                                                 coreFrequency = FixedFrequency(50 MHz),
+                                                                 ioWaitStates  = 1)
+
 
   // Provide a default configuration
   def default : CoreConfig = {

@@ -34,7 +34,11 @@ def hwProject(id : String) = Project(id, file(id)).settings(
   Test / baseDirectory          := baseDirectory.value,
   Test / parallelExecution      := false,
   Compile / run / fork          := true,
-  Compile / run / baseDirectory := (ThisBuild / baseDirectory).value,   // toolchain/forth wzgledem korzenia repo
+  Compile / run / baseDirectory := (ThisBuild / baseDirectory).value,   // gen/ w korzeniu repo, jak w upstreamie
+  // J1Config.forthBase szuka toolchain/forth/build/16bit/nuc.binary w $J1SCBASE
+  // (dziala tez, gdy J1Sc jest submodule'em i sbt startuje z katalogu konsumenta)
+  Test          / envVars += "J1SCBASE" -> (ThisBuild / baseDirectory).value.getAbsolutePath,
+  Compile / run / envVars += "J1SCBASE" -> (ThisBuild / baseDirectory).value.getAbsolutePath,
   publish / skip := true
 )
 
@@ -43,7 +47,8 @@ lazy val j1 = hwProject("j1")
 
 lazy val boards = hwProject("boards")
   .dependsOn(j1)
-  .settings(libraryDependencies += "io.github.java-native" % "jssc" % "2.9.6")   // UART w J1BoardSim
+  .settings(libraryDependencies ++= Seq("io.github.java-native" % "jssc" % "2.9.6",            // UART w J1BoardSim
+                                         "org.scalatest" %% "scalatest" % "3.2.19" % Test))
 
 // id inne niz "root" i "hwlib" konsumenta
 lazy val j1sc = (project in file("."))
