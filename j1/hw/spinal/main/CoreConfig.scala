@@ -269,8 +269,9 @@ case class J1UARTConfig (clockDividerWidth : Int,
 
 object J1UARTConfig {
 
-  // Numato Mimas V2: USB-UART bridge in the onboard PIC runs at 19200 baud
-  def mimasV2Uart(baudrate : Int = 19200) : J1UARTConfig = J1UARTConfig(clockDividerWidth = 20,
+  // Numato Mimas V2: the USB-UART bridge in the onboard PIC runs at a fixed rate -
+  // 115200 with jimmo/numato-mimasv2-pic-firmware, 19200 with the factory firmware
+  def mimasV2Uart(baudrate : Int = 115200) : J1UARTConfig = J1UARTConfig(clockDividerWidth = 20,
                                                                          dataWidthMax      = 8,
                                                                          baudrate          = baudrate,
                                                                          dataLength        = 7,
@@ -355,9 +356,9 @@ case class CoreConfig(gpioConfig    : GPIOConfig,
 object CoreConfig {
 
   // Numato Mimas V2 (Spartan-6 XC6SLX9): 8 LEDs, 8 DIP switches, 6 push buttons,
-  // UART over the onboard PIC (19200 baud), core clock 50 MHz from a DCM.
+  // UART over the onboard PIC (115200 = jimmo PIC firmware, 19200 = factory), core clock 50 MHz from a DCM.
   // No PWM, seven-segment display or GPIO yet.
-  def mimasV2(baudrate : Int = 19200) : CoreConfig = CoreConfig(gpioConfig    = GPIOConfig.pmod,
+  def mimasV2(baudrate : Int = 115200) : CoreConfig = CoreConfig(gpioConfig    = GPIOConfig.pmod,
                                                                  ledBankConfig = LEDArrayConfig(width = 8, lowActive = false),
                                                                  pwmConfig     = null,
                                                                  ssdConfig     = null,

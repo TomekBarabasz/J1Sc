@@ -7,7 +7,8 @@ NET "clk100"     LOC = V10 | IOSTANDARD = LVCMOS33 ;
 NET "clk100"     TNM_NET = "clk100" ;
 TIMESPEC "TS_clk100" = PERIOD "clk100" 10 ns HIGH 50% ;
 
-# UART to the onboard PIC (USB CDC, 19200 baud). Slide switch SW7 must be in UART position.
+# UART to the onboard PIC (USB CDC). jimmo PIC firmware: 115200, second COM port;
+# factory firmware: 19200, slide switch SW7 in UART position. Rate is set at generation.
 # Schematic: PIC TX -> net "TX" -> A8 (FPGA input), PIC RX <- net "RX" <- B8 (FPGA output)
 NET "uart_rx"    LOC = A8  | IOSTANDARD = LVCMOS33 | PULLUP ;
 NET "uart_tx"    LOC = B8  | IOSTANDARD = LVCMOS33 | DRIVE = 8 | SLEW = SLOW ;

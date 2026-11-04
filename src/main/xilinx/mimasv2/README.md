@@ -11,12 +11,22 @@ kontroler przerwań. Zegar 100 MHz → DCM_SP → 50 MHz.
 | `90` | przyciski SW1..SW6, 1 = wciśnięty (SW1 to też reset) | `90 io@ .` |
 | `C0` / `D0` | timer A / B | |
 | `E0` | kontroler przerwań | |
-| `F0` | UART, 19200 8N1 | `key`, `emit` |
+| `F0` | UART 8N1, 115200 (albo 19200, patrz niżej) | `key`, `emit` |
+
+## 0. Firmware PIC-a decyduje o UART-cie
+Prędkość UART-u między PIC-iem a FPGA jest stała i ustala ją firmware PIC-a;
+bitstream musi mieć tę samą:
+
+| Firmware PIC-a | Porty COM | UART do FPGA | Generacja |
+| --- | --- | --- | --- |
+| [jimmo/numato-mimasv2-pic-firmware](https://github.com/jimmo/numato-mimasv2-pic-firmware) | **dwa**: programator (`mimas>`) i UART FPGA | **115200** | `J1MimasV2` (domyślnie) |
+| fabryczny Numato | jeden, przełączany SW7 | 19200 | `J1MimasV2 19200` |
 
 ## 1. Obraz Fortha i Verilog
 ```
-cd toolchain/forth && make && cd ../..          # gforth -> toolchain/forth/build/16bit/nuc.binary
-sbt "boards/runMain j1sc.boards.J1MimasV2"      # -> gen/src/verilog/J1MimasV2.v
+cd toolchain/forth && make && cd ../..              # gforth -> toolchain/forth/build/16bit/nuc.binary
+sbt "boards/runMain j1sc.boards.J1MimasV2"          # 115200 -> gen/src/verilog/J1MimasV2.v
+sbt "boards/runMain j1sc.boards.J1MimasV2 19200"    # firmware fabryczny
 ```
 `J1MimasV2.v` ma zawartość RAM-u (jądro SwapForth) wpisaną w blok `initial`
 — pliki `.bin` obok nie są potrzebne do syntezy.
@@ -28,23 +38,26 @@ sbt "boards/runMain j1sc.boards.J1MimasV2"      # -> gen/src/verilog/J1MimasV2.v
   (`-g Binary:Yes`), żeby powstał `.bin` dla konfiguratora Numato.
 
 ## 3. Wgranie
-SW7 w pozycji programowania (USB config), wgranie `J1MimasV2.bin` narzędziem Numato
-(Mimas V2 Configuration Tool / `MimasV2Config.py`), potem **SW7 w pozycję UART**.
+- **firmware jimmo**: `J1MimasV2.bin` przez port z konsolą `mimas>` (`programmer.py` z repo
+  firmware'u albo XMODEM: `mimas> f`), SW7 bez znaczenia;
+- **fabryczny**: SW7 w pozycji programowania, narzędzie Numato (`MimasV2Config.py`),
+  potem **SW7 w pozycję UART**.
 
 ## 4. Rozmowa z Forthem
-Gołe jądro wystarczy do prostych rzeczy — dowolny terminal 19200 8N1
-(`picocom -b 19200 /dev/ttyACM0`, PuTTY na COMx), SW1 = reset:
+Terminal na porcie **UART FPGA** (firmware jimmo: drugi port płytki, nie ten z `mimas>`),
+115200 8N1 (fabryczny: 19200). J1 nie ma znaku zachęty — po Enter odpowiada ` ok`.
+Gołe jądro wystarczy do prostych rzeczy (`picocom -b 115200 /dev/ttyACM1`, PuTTY), SW1 = reset:
 ```
 1 2 + .x          \ 0003  ok    (jądro drukuje hex: .x)
 85 64 io!         \ LED-y 01010101
 128 io@ .x        \ stan DIP-ów
 ```
 Pełny SwapForth (dziesiętne `.`, `do`/`loop`, `words` itd.) wgrywa się z PC — 554 linie,
-przy 19200 bodach kilkanaście–kilkadziesiąt sekund:
+kilka sekund przy 115200 (przy 19200 kilkanaście–kilkadziesiąt):
 ```
 pip install pyserial
 cd toolchain/forth
-python3 j1term.py -d /dev/ttyACM0 -b 19200 swapforth.fs     # Windows: -d COM5
+python3 j1term.py -d /dev/ttyACM1 swapforth.fs      # Windows: -d COM14; fabryczny: -b 19200
 ```
 Po `[swapforth.fs loaded]` zostajesz w terminalu (`#include plik.fs` dogrywa kolejne
 pliki, Ctrl-D kończy). Wgrany SwapForth jest w RAM-ie: ponowna konfiguracja FPGA
@@ -61,20 +74,22 @@ mirror
 ```
 
 ## Gdy coś nie działa
-- **`mimas>` w terminalu** — to konsola mikrokontrolera PIC, nie FPGA: SW7 jest w pozycji
-  programowania. Przestaw SW7 na UART (port COM zwykle zostaje ten sam). J1 nie ma
-  znaku zachęty — po Enter odpowiada samym `ok`.
+- **`mimas>` w terminalu** — to konsola PIC-a (programator flash), nie FPGA. Firmware
+  jimmo: weź **drugi** port COM płytki. Fabryczny: przestaw SW7 na UART.
+  J1 nie ma znaku zachęty — po Enter odpowiada samym ` ok`.
 - **`j1term.py`: `Contacting... no answer`** — po 3 s pokazuje, co przyszło z portu
-  (`mimas>` → SW7; nic → SW7, port, czy bitstream J1 jest wgrany, SW1 = reset).
-- W trybie UART terminal ustaw na **19200 8N1** (tyle ma UART w FPGA).
+  (`mimas>` → zły port / SW7; nic → port, prędkość bitstreamu vs firmware PIC-a, czy
+  bitstream J1 jest wgrany, SW1 = reset).
+- **krzaki w terminalu** — prędkość bitstreamu nie zgadza się z firmware'em PIC-a (tabela w §0).
 
 ## Sprawdzone
 - Symulacja (`sbt "boards/testOnly j1sc.boards.J1MimasV2SocTest"`, Verilator): jądro
   odpowiada na `1 2 + .x`, zapis LED-ów, odczyt DIP-ów, wgranie całego `swapforth.fs`
   protokołem `j1term.py` i potem `1 2 + .` → `3`.
 - yosys `synth_xilinx -family xc6s`: ok. 880 LUT, 4 RAMB16, 10 RAM32M, DCM_SP, 2 BUFG.
-- **Niesprawdzone na płytce**: timing w ISE (50 MHz), kierunek i baud UART-u PIC-a
-  (19200 wg dokumentacji Numato). Numeracja DIP-ów jak w NewHope/aht10 (DP1 = F17).
+- **Niesprawdzone na płytce**: timing w ISE (50 MHz), kierunek UART-u (A8/B8 ze schematu).
+  Prędkości: 115200 ze źródeł firmware'u jimmo (`fpga_uart.c`, SPBRG = 0x67), 19200 wg
+  dokumentacji Numato. Numeracja DIP-ów jak w NewHope/aht10 (DP1 = F17).
 
 ## Rozszerzenia
 Wersja z wyświetlaczem 7-seg (rejestr `0x60` + `SevenSegMux` z fpga-hw-lib) jest w

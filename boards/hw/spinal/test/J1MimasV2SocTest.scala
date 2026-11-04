@@ -126,4 +126,37 @@ class J1MimasV2SocTest extends AnyFunSuite {
       println(s"[J1MimasV2SocTest] after swapforth.fs: 1 2 + . -> ${r.replace("\r", "\\r").replace("\n", "\\n")}")
     }
   }
+
+  // Board default (CoreConfig.mimasV2(), 115200 = jimmo PIC firmware) at the real bit time.
+  test("board default UART 115200: 1 2 + .x  ->  0003") {
+    val bit = (freq / 115200).round.toInt
+    SimConfig
+      .withConfig(SpinalConfig(defaultConfigForClockDomains = J1MimasV2.globalClockConfig,
+                               defaultClockDomainFrequency  = FixedFrequency(50 MHz)))
+      .withVerilator.workspacePath("simWorkspace").workspaceName("j1mimasv2_soc_115200")
+      .compile(new J1MimasV2Soc(J1Config.forth16, CoreConfig.mimasV2()))
+      .doSim { d =>
+        val cd = d.clockDomain
+        d.io.dips #= 0; d.io.buttons #= 0; d.io.extInt #= 0; d.io.uart.rxd #= true
+        cd.forkStimulus(20)
+        cd.assertReset(); cd.waitSampling(10); cd.deassertReset()
+        val rx = new StringBuilder
+        fork {
+          while (true) {
+            cd.waitSamplingWhere(!d.io.uart.txd.toBoolean)
+            cd.waitSampling(bit + bit / 2)
+            var c = 0
+            for (i <- 0 until 8) { if (d.io.uart.txd.toBoolean) c |= 1 << i; cd.waitSampling(bit) }
+            rx += c.toChar
+          }
+        }
+        cd.waitSampling(20000)
+        for (c <- "1 2 + .x\r") {
+          d.io.uart.rxd #= false; cd.waitSampling(bit)
+          for (i <- 0 until 8) { d.io.uart.rxd #= ((c >> i) & 1) == 1; cd.waitSampling(bit) }
+          d.io.uart.rxd #= true; cd.waitSampling(bit * 2)
+        }
+        waitFor(() => rx.toString.toUpperCase, "0003 ", cd, maxCycles = 2000000)
+      }
+  }
 }

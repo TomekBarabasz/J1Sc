@@ -5,8 +5,9 @@ Same tethered protocol as shell.py (`1 tth !`: every response ends with 0x1E),
 but without the DTR/RTS reset, so it works with boards whose USB-UART bridge
 does not expose those lines (Numato Mimas V2: press SW1 instead).
 
-    python3 j1term.py -d /dev/ttyACM0 -b 19200 swapforth.fs     # load, then interactive
-    python3 j1term.py -d COM5 -b 19200                           # interactive only
+    python3 j1term.py -d /dev/ttyACM1 swapforth.fs     # load, then interactive (115200)
+    python3 j1term.py -d COM14                          # interactive only
+    python3 j1term.py -d COM5 -b 19200 swapforth.fs     # factory Mimas V2 PIC firmware
 
 Files are sent line by line; `include <file>` / `#include <file>` are expanded on the host
 (relative to the including file, then -p paths),
@@ -65,14 +66,16 @@ class J1:
         text = got.decode("utf-8", "replace")
         lines = [f"received: {got[:200]!r}" if got else "received: nothing"]
         if "mimas" in text.lower():
-            lines.append("This is the Mimas V2 PIC's own console, not the FPGA: put slide switch SW7"
-                         " in the UART position (the board ships in the USB-programming position).")
+            lines.append("This is the Mimas V2 PIC's console (flash programmer), not the FPGA UART."
+                         " jimmo PIC firmware: use the OTHER serial port of the board (FPGA UART, 115200)."
+                         " Factory firmware: put slide switch SW7 in the UART position and use -b 19200.")
         elif not got:
             lines.append("Check: slide switch SW7 in UART position, the right COM port, the J1 bitstream"
-                         " loaded into the FPGA, baud 19200; press SW1 (reset) and try again.")
+                         " loaded into the FPGA, the baud rate the bitstream was generated for (115200 / 19200);"
+                         " press SW1 (reset) and try again.")
         else:
             lines.append("Something answered but never sent 0x1E (tethered mode): wrong baud rate,"
-                         " or not the SwapForth nucleus. Try a plain terminal at 19200 and type: 1 2 + .x")
+                         " or not the SwapForth nucleus. Try a plain terminal at the same baud and type: 1 2 + .x")
         return "\n".join(lines)
 
     def command(self, line):
@@ -128,7 +131,7 @@ class J1:
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("-d", "--device", required=True, help="serial port, e.g. /dev/ttyACM0 or COM5")
-    ap.add_argument("-b", "--baud", type=int, default=19200)
+    ap.add_argument("-b", "--baud", type=int, default=115200, help="115200 (jimmo PIC firmware, default) or 19200 (factory)")
     ap.add_argument("-p", "--path", action="append", default=[], help="search path for files")
     ap.add_argument("files", nargs="*", help="Forth sources to load before the shell")
     a = ap.parse_args()

@@ -15,9 +15,11 @@ import spinal.lib.com.uart._
 //    0x40 LEDs D1..D8 (r/w)            0x80 DIP switches DP1..DP8 (r, 1 = ON)
 //    0x90 push buttons SW1..SW6 (r, 1 = pressed; SW1 is also the reset)
 //    0xC0 / 0xD0 timer A / B           0xE0 interrupt controller
-//    0xF0 UART (19200 8N1 over the PIC USB bridge, slide switch SW7 = UART)
+//    0xF0 UART 8N1 over the PIC USB bridge: 115200 (jimmo PIC firmware, second COM port)
+//         or 19200 (factory firmware, slide switch SW7 = UART) - generator argument
 //
-//    sbt "boards/runMain j1sc.boards.J1MimasV2"
+//    sbt "boards/runMain j1sc.boards.J1MimasV2"          (115200)
+//    sbt "boards/runMain j1sc.boards.J1MimasV2 19200"    (factory PIC firmware)
 //    -> gen/src/verilog/J1MimasV2.v + J1MimasV2.v_toplevel_*.bin (RAM image)
 //    UCF: src/main/xilinx/mimasv2/J1MimasV2.ucf
 // =====================================================================
@@ -160,13 +162,17 @@ object J1MimasV2 {
     cd
   }
 
+  /** UART rate from the generator arguments: none = 115200 (jimmo PIC firmware), "19200" = factory. */
+  def baudFromArgs(args : Array[String]) : Int = args.headOption.map(_.toInt).getOrElse(115200)
+
   def main(args : Array[String]) : Unit = {
-    println("[J1Sc] Create the J1 for a Numato Mimas V2 board")
+    val baud = baudFromArgs(args)
+    println(s"[J1Sc] Create the J1 for a Numato Mimas V2 board, UART $baud baud")
     val dir = "gen/src/verilog"
     SpinalConfig(mergeAsyncProcess            = true,
                  defaultConfigForClockDomains = globalClockConfig,
                  targetDirectory              = dir)
-      .generateVerilog(new J1MimasV2(J1Config.forth16, CoreConfig.mimasV2()))
+      .generateVerilog(new J1MimasV2(J1Config.forth16, CoreConfig.mimasV2(baud)))
       .printPruned()
     InlineReadmem(s"$dir/J1MimasV2.v")
   }
