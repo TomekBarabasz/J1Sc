@@ -16,6 +16,7 @@ Interactive: type Forth, Ctrl-D / Ctrl-C to quit, `#include <file>` to load a fi
 import argparse
 import os
 import sys
+import time
 
 try:
     import serial
@@ -25,27 +26,54 @@ except ImportError:
 EOT = b"\x1e"
 
 
+class NoContact(Exception):
+    pass
+
+
 class J1:
     def __init__(self, port, baud):
-        self.ser = serial.Serial(port, baud, timeout=None, rtscts=False)
+        self.ser = serial.Serial(port, baud, timeout=0.1, rtscts=False)
 
-    def connect(self):
-        """Puts the nucleus into tethered mode and waits for the first 0x1E."""
+    def connect(self, timeout=3.0):
+        """Puts the nucleus into tethered mode and waits for the first 0x1E.
+        Raises NoContact with what was received if the target does not answer."""
         sys.stdout.write("Contacting... ")
         sys.stdout.flush()
         self.ser.reset_input_buffer()
         self.ser.write(b"\r 1 tth !\r")
-        self._read_until_eot()
+        got = self._read_until_eot(timeout)
+        if got is None:
+            print("no answer")
+            raise NoContact(self._diagnose(bytes(self._last)))
         self.ser.reset_input_buffer()
         print("established")
 
-    def _read_until_eot(self):
+    def _read_until_eot(self, timeout=None):
+        """Bytes up to 0x1E (without it); None if `timeout` seconds pass first."""
         buf = bytearray()
+        self._last = buf
+        deadline = None if timeout is None else time.monotonic() + timeout
         while True:
             c = self.ser.read(max(1, self.ser.in_waiting))
             buf += c
             if EOT in c:
                 return buf.replace(EOT, b"").decode("utf-8", "replace")
+            if deadline is not None and time.monotonic() > deadline:
+                return None
+
+    def _diagnose(self, got):
+        text = got.decode("utf-8", "replace")
+        lines = [f"received: {got[:200]!r}" if got else "received: nothing"]
+        if "mimas" in text.lower():
+            lines.append("This is the Mimas V2 PIC's own console, not the FPGA: put slide switch SW7"
+                         " in the UART position (the board ships in the USB-programming position).")
+        elif not got:
+            lines.append("Check: slide switch SW7 in UART position, the right COM port, the J1 bitstream"
+                         " loaded into the FPGA, baud 19200; press SW1 (reset) and try again.")
+        else:
+            lines.append("Something answered but never sent 0x1E (tethered mode): wrong baud rate,"
+                         " or not the SwapForth nucleus. Try a plain terminal at 19200 and type: 1 2 + .x")
+        return "\n".join(lines)
 
     def command(self, line):
         self.ser.write(line.encode("utf-8") + b"\r")
@@ -106,7 +134,10 @@ def main():
     a = ap.parse_args()
 
     j1 = J1(a.device, a.baud)
-    j1.connect()
+    try:
+        j1.connect()
+    except NoContact as e:
+        sys.exit(str(e))
     for f in a.files:
         if not j1.include(f, a.path):
             break

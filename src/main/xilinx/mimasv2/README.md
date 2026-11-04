@@ -60,6 +60,14 @@ hex
 mirror
 ```
 
+## Gdy coś nie działa
+- **`mimas>` w terminalu** — to konsola mikrokontrolera PIC, nie FPGA: SW7 jest w pozycji
+  programowania. Przestaw SW7 na UART (port COM zwykle zostaje ten sam). J1 nie ma
+  znaku zachęty — po Enter odpowiada samym `ok`.
+- **`j1term.py`: `Contacting... no answer`** — po 3 s pokazuje, co przyszło z portu
+  (`mimas>` → SW7; nic → SW7, port, czy bitstream J1 jest wgrany, SW1 = reset).
+- W trybie UART terminal ustaw na **19200 8N1** (tyle ma UART w FPGA).
+
 ## Sprawdzone
 - Symulacja (`sbt "boards/testOnly j1sc.boards.J1MimasV2SocTest"`, Verilator): jądro
   odpowiada na `1 2 + .x`, zapis LED-ów, odczyt DIP-ów, wgranie całego `swapforth.fs`
