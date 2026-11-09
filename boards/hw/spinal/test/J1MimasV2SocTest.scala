@@ -26,9 +26,10 @@ class J1MimasV2SocTest extends AnyFunSuite {
     rtl.foldLeft(sc)(_.addRtl(_)).compile(new J1MimasV2Soc(j1, CoreConfig.mimasV2(baud)))
   }
   lazy val compiled    = compileSoc("j1mimasv2_soc", J1Config.forth16)
-  // jak na plytce (J1MimasV2.j1FromArgs("mul")): J1MulUnit na prymitywach DSP48A1 + model, nuc-mul.binary
-  lazy val compiledMul = compileSoc("j1mimasv2_soc_mul", J1MimasV2.j1FromArgs(Array("mul")),
-                                    Seq(sys.env.getOrElse("J1SCBASE", "..") + "/j1/hw/sim/DSP48A1.v"))
+  // jak na plytce (J1MimasV2.j1FromArgs): J1MulUnit na prymitywach DSP48A1 + model
+  val dspModel = Seq(sys.env.getOrElse("J1SCBASE", "..") + "/j1/hw/sim/DSP48A1.v")
+  lazy val compiledMul = compileSoc("j1mimasv2_soc_mul", J1MimasV2.j1FromArgs(Array("mul")), dspModel)   // 1 DSP, nuc-mul
+  lazy val compiledMac = compileSoc("j1mimasv2_soc_mac", J1MimasV2.j1FromArgs(Array("mac")), dspModel)   // 2 DSP, nuc-mac
 
   /** Starts the SoC, returns (send line, received text so far). */
   def session(dips : Int, sim : => SimCompiled[J1MimasV2Soc] = compiled)(body : (J1MimasV2Soc, String => Unit, () => String) => Unit) : Unit =
@@ -173,7 +174,8 @@ class J1MimasV2SocTest extends AnyFunSuite {
     "-1 -1 um* .x .x" -> "FFFE 0001 ",              // 0xFFFF * 0xFFFF = 0xFFFE0001
     "-3 7 m* .x .x"   -> "FFFF FFEB ",              // -21 ze znakiem (m* przez um*)
     "4660 22136 * .x" -> "0060 ")                   // 0x1234 * 0x5678 = 0x06260060
-  for ((name, sim) <- Seq("forth16 (programowo)" -> (() => compiled), "forth16Mul (DSP)" -> (() => compiledMul)))
+  for ((name, sim) <- Seq("forth16 (programowo)" -> (() => compiled), "forth16Mul (1 DSP)" -> (() => compiledMul),
+                          "forth16MulMac (2 DSP)" -> (() => compiledMac)))
     test(s"mnozenie, $name: *, um*, m*") {
       session(dips = 0, sim = sim()) { (d, send, rx) =>
         for ((cmd, want) <- mulCases) {
@@ -184,14 +186,14 @@ class J1MimasV2SocTest extends AnyFunSuite {
       }
     }
 
-  // MAC (tylko forth16Mul): akumulator 48 b w DSP48A1; acc@ = P[31:0] jako (lo hi), acc@x = P[47:32]
+  // MAC (forth16MulMac): akumulator 48 b w DSP48A1; acc@ = P[31:0] jako (lo hi), acc@x = P[47:32]
   val macCases = Seq(
     "acc0 3 4 mac 5 6 mac acc@ .x .x"                    -> "0000 002A ",       // 12 + 30 = 42
     "acc0 -3 4 macs 2 5 macs acc@ .x .x"                 -> "FFFF FFFE ",       // -12 + 10 = -2
     "acc0 -1 -1 mac -1 -1 mac acc@x .x acc@ .x .x"       -> "0001 FFFC 0002 ",  // 2 * 0xFFFE0001 = 0x1FFFC0002
     "7 9 acc! acc@ .x .x"                                -> "0000 003F ")       // acc! laduje P
-  test("MAC, forth16Mul (DSP): acc0, mac, macs, acc@, acc@x, acc!") {
-    session(dips = 0, sim = compiledMul) { (d, send, rx) =>
+  test("MAC, forth16MulMac (2 DSP): acc0, mac, macs, acc@, acc@x, acc!") {
+    session(dips = 0, sim = compiledMac) { (d, send, rx) =>
       for ((cmd, want) <- macCases) {
         val before = rx().length
         send(cmd)

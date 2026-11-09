@@ -245,9 +245,11 @@ case class J1Config (wordSize            : Int,
                      numOfRAMs           : Int,
                      startAddress        : Int,
                      bootCode            : () => List[Bits],
-                     // Mnozenie sprzetowe (DSP): operacje ALU N*T i N*Th na bicie 12 instrukcji ALU.
-                     // false = ISA jak w upstreamie (bit 12 ignorowany). Patrz J1Alu.
+                     // Operacje rozszerzone ALU na bicie 12 (J1MulUnit), kazda opcja = 1 blok DSP:
+                     //   hasMul: kanal mnozenia P0 (*, um*, m*), hasMac: akumulator MAC P1 (48 b).
+                     // Obie false = ISA jak w upstreamie (bit 12 ignorowany).
                      hasMul              : Boolean = false,
+                     hasMac              : Boolean = false,
                      // Kanaly J1MulUnit na prymitywie DSP48A1 (tylko Spartan-6; rejestry A/B, M,
                      // OPMODE i P w bloku DSP). false = wersja behawioralna (dowolne FPGA).
                      mulDsp48a1          : Boolean = false)
@@ -692,14 +694,18 @@ object J1Config {
     config
 
   }
-  // forth16 z mnozeniem sprzetowym: ALU N*T / N*Th (jeden DSP48A1 na Spartanie-6)
-  // i jadro toolchain/forth/build/16bit/nuc-mul.binary (* i um* na tych instrukcjach)
-  def forth16Mul = {
+  /** forth16 z operacjami J1MulUnit i pasujacym obrazem jadra (toolchain/forth/build/16bit). */
+  private def forth16With(hasMul : Boolean, hasMac : Boolean, image : String) = {
     val base = forth16
-    def baseSystem = forthBase(base.wordSize, "nuc-mul").take((1 << base.adrWidth) - base.irqConfig.numOfInterrupts)
-    base.copy(hasMul   = true,
+    def baseSystem = forthBase(base.wordSize, image).take((1 << base.adrWidth) - base.irqConfig.numOfInterrupts)
+    base.copy(hasMul = hasMul, hasMac = hasMac,
               bootCode = () => baseSystem ++ List.fill((1 << base.adrWidth) - baseSystem.length)(B(0, base.wordSize bits)))
   }
+  // samo mnozenie (1 DSP): *, um*, m* sprzetowo - nuc-mul.binary
+  def forth16Mul    = forth16With(hasMul = true, hasMac = false, "nuc-mul")
+  // mnozenie + MAC (2 DSP): jak wyzej + acc0 acc! mac macs acc@ acc@x - nuc-mac.binary
+  def forth16MulMac = forth16With(hasMul = true, hasMac = true, "nuc-mac")
+
 
 
 }

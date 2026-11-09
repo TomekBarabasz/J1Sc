@@ -3,12 +3,13 @@ package j1sc
 import spinal.core._
 
 // =====================================================================
-//  J1MulUnit - mnozenie i MAC na DSP48A1 (J1Config.hasMul).
+//  J1MulUnit - mnozenie i MAC na DSP48A1 (J1Config.hasMul / hasMac).
 //
-//  Dwa niezalezne kanaly, kazdy w osobnym DSP48A1 z rejestrami A/B, M i P:
-//    kanal mul (P0, 32 b): *, um*, m* - jadro Fortha uzywa go sam (np. przy
+//  Dwa niezalezne kanaly, kazdy w osobnym DSP48A1 z rejestrami A/B, M i P,
+//  wlaczane osobno (oszczedzanie blokow DSP):
+//    kanal mul (P0, 32 b), hasMul: *, um*, m* - jadro Fortha uzywa go samo (np. przy
 //                          parsowaniu liczb), wiec nie moze dzielic P z MAC
-//    kanal mac (P1, 48 b): akumulator MAC, ktorego nic poza slowami MAC nie rusza
+//    kanal mac (P1, 48 b), hasMac: akumulator MAC, ktorego nic poza slowami MAC nie rusza
 //
 //  Operacje rozszerzone ALU: bit 12 instrukcji ALU = 1, kod w bitach 11..8.
 //    op 0000 mul    P0 := N * T  bez znaku      ALU: T := N (z d-1 zdejmuje T)
@@ -133,39 +134,44 @@ case class J1MulUnit(cfg : J1Config) extends Area {
     }
   }
 
-  val mulCh = new Channel("mulP0", 32)
-  val macCh = new Channel("macP1", 48)
+  // Kanaly wg konfiguracji: hasMul -> P0 (1 DSP), hasMac -> P1 (1 DSP). Kody kanalu,
+  // ktorego nie ma, dzialaja jak bez bitu 12 (zarezerwowane) - jak przy hasMul = false.
+  val mulCh = if (cfg.hasMul) new Channel("mulP0", 32) else null
+  val macCh = if (cfg.hasMac) new Channel("macP1", 48) else null
 
   /** Odczyt P kanalu z niepustym potokiem w instrukcji z pamieci -> stall. */
   def interlock(rawInstr : Bits, pcMsb : Bool) : Bool = {
     val o = op(rawInstr)
-    isExt(rawInstr, pcMsb) && (((o === MULL || o === MULH) && mulCh.busy) ||
-                               ((o === ACCL || o === ACCH || o === ACCX) && macCh.busy))
+    val mulRd = if (mulCh != null) (o === MULL || o === MULH) && mulCh.busy else False
+    val macRd = if (macCh != null) (o === ACCL || o === ACCH || o === ACCX) && macCh.busy else False
+    isExt(rawInstr, pcMsb) && (mulRd || macRd)
   }
 
   /** Wydanie z wykonywanej instrukcji (przy stall jest tu NOP) i przesuw potokow. */
   def build(instr : Bits, pcMsb : Bool, dtos : Bits, dnos : Bits) : Unit = {
     val o   = op(instr)
     val ext = isExt(instr, pcMsb)
-    mulCh.build(issue = ext && (o === MUL || o === MULS), acc = False,
-                signed = o === MULS, dnos, dtos)
-    macCh.build(issue = ext && (o === MAC || o === MACS || o === ACCST), acc = o =/= ACCST,
-                signed = o === MACS, dnos, dtos)
+    if (mulCh != null) mulCh.build(issue = ext && (o === MUL || o === MULS), acc = False,
+                                   signed = o === MULS, dnos, dtos)
+    if (macCh != null) macCh.build(issue = ext && (o === MAC || o === MACS || o === ACCST), acc = o =/= ACCST,
+                                   signed = o === MACS, dnos, dtos)
   }
 
   /** Wynik ALU dla operacji rozszerzonych; `base` dla pozostalych kodow. */
   def aluResult(instr : Bits, dnos : Bits, base : Bits) : Bits = {
     val o   = op(instr)
     val ext = instr(instr.high - 3)
-    val p0  = mulCh.p.asBits
-    val p1  = macCh.p.asBits
-    Mux(!ext, base, o.mux[Bits](
-      MUL     -> dnos, MULS -> dnos, MAC -> dnos, MACS -> dnos, ACCST -> dnos,
-      MULL    -> p0(15 downto 0),
-      MULH    -> p0(31 downto 16),
-      ACCL    -> p1(15 downto 0),
-      ACCH    -> p1(31 downto 16),
-      ACCX    -> p1(47 downto 32),
-      default -> base))
+    val cases = scala.collection.mutable.ArrayBuffer[(Any, Bits)]()
+    if (mulCh != null) {
+      val p0 = mulCh.p.asBits
+      cases ++= Seq(MUL -> dnos, MULS -> dnos, MULL -> p0(15 downto 0), MULH -> p0(31 downto 16))
+    }
+    if (macCh != null) {
+      val p1 = macCh.p.asBits
+      cases ++= Seq(MAC -> dnos, MACS -> dnos, ACCST -> dnos,
+                    ACCL -> p1(15 downto 0), ACCH -> p1(31 downto 16), ACCX -> p1(47 downto 32))
+    }
+    cases += (default -> base)
+    Mux(!ext, base, o.mux[Bits](cases.toSeq : _*))
   }
 }

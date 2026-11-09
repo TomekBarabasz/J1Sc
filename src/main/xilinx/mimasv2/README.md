@@ -75,9 +75,9 @@ mirror
 
 ## Mnożenie i MAC na DSP (opcja)
 `sbt "boards/runMain j1sc.boards.J1MimasV2 mul"` (można łączyć z prędkością: `19200 mul`) buduje
-J1 z `J1MulUnit` na dwóch prymitywach DSP48A1 i jądrem `nuc-mul.binary` (`make` w
-`toolchain/forth` buduje oba obrazy). `*`, `um*`, `m*` działają tak samo, szybciej; dochodzi MAC
-z akumulatorem 48 b:
+J1 z mnożeniem na jednym prymitywie DSP48A1 i jądrem `nuc-mul.binary`: `*`, `um*`, `m*` działają
+tak samo, szybciej. `mac` zamiast `mul` dokłada drugi DSP48A1 z akumulatorem 48 b i jądro
+`nuc-mac.binary` (`make` w `toolchain/forth` buduje wszystkie obrazy):
 ```
 acc0  3 4 mac  5 6 mac  acc@ d.      \ 42   (po wgraniu swapforth.fs; jądro: acc@ .x .x)
 acc0  -3 4 macs  2 5 macs  acc@ d.   \ -2

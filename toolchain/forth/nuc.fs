@@ -330,8 +330,7 @@ header d2*
 ;
 
 hwmul [if]
-\ mnozenie / MAC na DSP48A1 (basewords-mul.fs, J1Config.hasMul):
-\ *, um*, m* na kanale P0; acc0 acc! mac macs acc@ acc@x na akumulatorze MAC P1 (48 b)
+\ mnozenie na DSP48A1 (basewords-mul.fs, J1Config.hasMul): *, um*, m* na kanale P0
 header um*
 : um*  ( u1 u2 -- ud )
     dsp-mul dsp-mul@ dsp-mul@h
@@ -340,36 +339,6 @@ header um*
 header *
 : *
     dsp-mul dsp-mul@
-;
-
-header acc0   \ ( -- )        P := 0
-: acc0
-    d# 0 d# 0 dsp-acc! drop drop
-;
-
-header acc!   \ ( u1 u2 -- )  P := u1*u2
-: acc!
-    dsp-acc! drop
-;
-
-header mac    \ ( u1 u2 -- )  P += u1*u2 bez znaku
-: mac
-    dsp-mac drop
-;
-
-header macs   \ ( n1 n2 -- )  P += n1*n2 ze znakiem
-: macs
-    dsp-macs drop
-;
-
-header acc@   \ ( -- d )      P[31:0] jako liczba podwojna
-: acc@
-    dup dsp-acc@ dsp-acc@h
-;
-
-header acc@x  \ ( -- x )      P[47:32]
-: acc@x
-    dsp-acc@x
 ;
 
 [else]
@@ -412,6 +381,40 @@ header um*
 header *
 : *
     um* drop
+;
+
+[then]
+
+hwmac [if]
+\ akumulator MAC P1 48 b (basewords-mac.fs, J1Config.hasMac)
+header acc0   \ ( -- )        P := 0
+: acc0
+    d# 0 d# 0 dsp-acc! drop drop
+;
+
+header acc!   \ ( u1 u2 -- )  P := u1*u2
+: acc!
+    dsp-acc! drop
+;
+
+header mac    \ ( u1 u2 -- )  P += u1*u2 bez znaku
+: mac
+    dsp-mac drop
+;
+
+header macs   \ ( n1 n2 -- )  P += n1*n2 ze znakiem
+: macs
+    dsp-macs drop
+;
+
+header acc@   \ ( -- d )      P[31:0] jako liczba podwojna
+: acc@
+    dup dsp-acc@ dsp-acc@h
+;
+
+header acc@x  \ ( -- x )      P[47:32]
+: acc@x
+    dsp-acc@x
 ;
 
 [then]

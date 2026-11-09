@@ -39,7 +39,7 @@ object J1IsaTest {
 
   val adrWidth = 8
 
-  def cfg(prog : Seq[Int], hasMul : Boolean = false, dsp : Boolean = false) = J1Config(
+  def cfg(prog : Seq[Int], hasMul : Boolean = false, dsp : Boolean = false, hasMac : Boolean = false) = J1Config(
     wordSize            = 16,
     dataStackIdxWidth   = 5,
     returnStackIdxWidth = 4,
@@ -52,6 +52,7 @@ object J1IsaTest {
     startAddress        = 0,
     bootCode            = () => (prog ++ Seq.fill((1 << adrWidth) - prog.size)(0)).map(B(_, 16 bits)).toList,
     hasMul              = hasMul,
+    hasMac              = hasMac,
     mulDsp48a1          = dsp)
 
   val spinal = SpinalConfig(defaultConfigForClockDomains =
@@ -63,11 +64,11 @@ class J1IsaTest extends AnyFunSuite {
 
   /** Uruchamia program, zwraca zapisy I/O (adres, dane). readData = ioIn. */
   def ioWrites(name : String, prog : Seq[Int], ioIn : Int = 0, cycles : Int = 200, hasMul : Boolean = false,
-               dsp : Boolean = false) : Seq[(Int, Int)] = {
+               dsp : Boolean = false, hasMac : Boolean = false) : Seq[(Int, Int)] = {
     var writes = Vector.empty[(Int, Int)]
     val sc = SimConfig.withConfig(spinal).withVerilator.workspacePath("simWorkspace").workspaceName(name)
     (if (dsp) sc.addRtl("hw/sim/DSP48A1.v") else sc)                // model prymitywu DSP48A1
-      .compile(new J1(cfg(prog, hasMul, dsp))).doSim(name) { d =>
+      .compile(new J1(cfg(prog, hasMul, dsp, hasMac))).doSim(name) { d =>
         d.internal.stall  #= false
         d.internal.irq    #= false
         d.internal.intVec #= 0
@@ -135,7 +136,7 @@ class J1IsaTest extends AnyFunSuite {
           lit(a) ++ lit(b) ++ Seq(if (signed) macs else mac, pop)
         } ++ readAcc
         val p = pairs.map { case (a, b) => prod(a, b) }.sum
-        assert(ioWrites(s"isa_mac_${name}_$v", prog :+ jmp(prog.size), cycles = 800, hasMul = true, dsp = dsp) == accWrites(p), name)
+        assert(ioWrites(s"isa_mac_${name}_$v", prog :+ jmp(prog.size), cycles = 800, hasMul = true, dsp = dsp, hasMac = true) == accWrites(p), name)
       }
     }
 
@@ -146,7 +147,7 @@ class J1IsaTest extends AnyFunSuite {
       var st = vals.toList; var p = BigInt(0)
       for (_ <- 1 until vals.size) { val t = st.last; val n = st(st.size - 2); p += BigInt(n) * t; st = st.init }
       assert(p > BigInt(0xFFFFFFFFL))
-      assert(ioWrites(s"isa_mac_b2b_$v", prog :+ jmp(prog.size), cycles = 400, hasMul = true, dsp = dsp) == accWrites(p))
+      assert(ioWrites(s"isa_mac_b2b_$v", prog :+ jmp(prog.size), cycles = 400, hasMul = true, dsp = dsp, hasMac = true) == accWrites(p))
     }
 
     test(s"mul / muls miedzy mac nie ruszaja akumulatora MAC (osobne kanaly) ($v)") {
@@ -157,8 +158,14 @@ class J1IsaTest extends AnyFunSuite {
                  lit(0xFFFD) ++ Seq(push(7), muls, mulL) ++ out(0x43) ++ Seq(mulH) ++ out(0x44) ++   // -3 * 7 = -21
                  readAcc
       val want = Seq(0x43 -> 0xFFEB, 0x44 -> 0xFFFF) ++ accWrites(BigInt(100 * 200 + 300 * 400))
-      assert(ioWrites(s"isa_mul_vs_mac_$v", prog :+ jmp(prog.size), cycles = 400, hasMul = true, dsp = dsp) == want)
+      assert(ioWrites(s"isa_mul_vs_mac_$v", prog :+ jmp(prog.size), cycles = 400, hasMul = true, dsp = dsp, hasMac = true) == want)
     }
+  }
+
+  test("samo hasMul (1 DSP): kody MAC dzialaja jak bez bitu 12") {
+    // 0x7403 = op 0100 (T|N) z d-1: (300 7) -> 300 | 7 = 0x12F; mul dalej dziala
+    val prog = Seq(push(300), push(7), mac) ++ out(0x40) ++ Seq(push(300), push(7), mul, mulL) ++ out(0x41)
+    assert(ioWrites("isa_mul_only", prog :+ jmp(prog.size), hasMul = true) == Seq(0x40 -> 0x12F, 0x41 -> 2100))
   }
 
   test("bez hasMul bit 12 jest ignorowany (ISA jak w upstreamie)") {

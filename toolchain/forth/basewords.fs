@@ -1,6 +1,7 @@
 ( J1 base words implemented in assembler     JCB 17:27 12/31/11)
 
 :: hwmul   false ;   \ mnozenie sprzetowe: true w basewords-mul.fs (J1Config.hasMul)
+:: hwmac   false ;   \ akumulator MAC: true w basewords-mac.fs (J1Config.hasMac)
 
 : T         h# 0000 ;
 : N         h# 0100 ;

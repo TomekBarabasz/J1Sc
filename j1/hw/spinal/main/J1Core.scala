@@ -55,7 +55,7 @@ class J1Core(cfg : J1Config) extends Component {
 
   // Stall rdzenia: z zewnatrz (JTAG) albo blokada odczytu akumulatora J1MulUnit
   val stall   = Bool()
-  val mulUnit = if (cfg.hasMul) J1MulUnit(cfg) else null
+  val mulUnit = if (cfg.hasMul || cfg.hasMac) J1MulUnit(cfg) else null
 
   // Check status and inject nop (stall mode) or call-instruction (interrupt mode) when needed
   val stateSelect = stall ## internal.irq
@@ -84,7 +84,7 @@ class J1Core(cfg : J1Config) extends Component {
   val aluResult = alu(instr, dtos, dnos, dStackPtr, rtos, internal.toRead, mulUnit)
 
   // Mnozenie / MAC: wydanie z wykonywanej instrukcji, blokada z instrukcji z pamieci
-  if (cfg.hasMul) {
+  if (mulUnit != null) {
     mulUnit.build(instr, pc.msb, dtos, dnos)
     stall := internal.stall || mulUnit.interlock(internal.memInstr, pc.msb)
   } else {

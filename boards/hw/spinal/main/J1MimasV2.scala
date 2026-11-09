@@ -20,7 +20,8 @@ import spinal.lib.com.uart._
 //
 //    sbt "boards/runMain j1sc.boards.J1MimasV2"          (115200)
 //    sbt "boards/runMain j1sc.boards.J1MimasV2 19200"    (factory PIC firmware)
-//    sbt "boards/runMain j1sc.boards.J1MimasV2 mul"      (hardware multiply: J1Config.forth16Mul)
+//    sbt "boards/runMain j1sc.boards.J1MimasV2 mul"      (multiply on 1 DSP48A1: J1Config.forth16Mul)
+//    sbt "boards/runMain j1sc.boards.J1MimasV2 mac"      (multiply + MAC on 2 DSP48A1: forth16MulMac)
 //    -> gen/src/verilog/J1MimasV2.v + J1MimasV2.v_toplevel_*.bin (RAM image)
 //    UCF: src/main/xilinx/mimasv2/J1MimasV2.ucf
 // =====================================================================
@@ -166,15 +167,19 @@ object J1MimasV2 {
   /** UART rate from the generator arguments: first number, none = 115200 (jimmo PIC firmware), "19200" = factory. */
   def baudFromArgs(args : Array[String]) : Int = args.find(_.forall(_.isDigit)).map(_.toInt).getOrElse(115200)
 
-  /** CPU configuration from the generator arguments: "mul" = forth16Mul with J1MulUnit on two DSP48A1
-    * primitives (mul + MAC, registers inside the DSP; nuc-mul.binary), otherwise forth16. */
+  /** CPU configuration from the generator arguments (J1MulUnit on DSP48A1 primitives):
+    *   "mac" = forth16MulMac: multiply + MAC accumulator, 2 DSP48A1, nuc-mac.binary
+    *   "mul" = forth16Mul:    multiply only (*, um*, m*), 1 DSP48A1, nuc-mul.binary
+    *   none  = forth16:       no DSP, nuc.binary */
   def j1FromArgs(args : Array[String]) : J1Config =
-    if (args.contains("mul")) J1Config.forth16Mul.copy(mulDsp48a1 = true) else J1Config.forth16
+    if (args.contains("mac"))      J1Config.forth16MulMac.copy(mulDsp48a1 = true)
+    else if (args.contains("mul")) J1Config.forth16Mul.copy(mulDsp48a1 = true)
+    else                           J1Config.forth16
 
   def main(args : Array[String]) : Unit = {
     val baud = baudFromArgs(args)
     val j1   = j1FromArgs(args)
-    println(s"[J1Sc] Create the J1 for a Numato Mimas V2 board, UART $baud baud, hardware multiply: ${j1.hasMul}")
+    println(s"[J1Sc] Create the J1 for a Numato Mimas V2 board, UART $baud baud, multiply: ${j1.hasMul}, MAC: ${j1.hasMac}")
     val dir = "gen/src/verilog"
     SpinalConfig(mergeAsyncProcess            = true,
                  defaultConfigForClockDomains = globalClockConfig,
