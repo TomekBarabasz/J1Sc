@@ -53,8 +53,12 @@ class J1Core(cfg : J1Config) extends Component {
   val pc        = pcInfo._1
   val returnPC  = pcInfo._2
 
+  // Stall rdzenia: z zewnatrz (JTAG) albo blokada odczytu akumulatora J1MulUnit
+  val stall   = Bool()
+  val mulUnit = if (cfg.hasMul) J1MulUnit(cfg) else null
+
   // Check status and inject nop (stall mode) or call-instruction (interrupt mode) when needed
-  val stateSelect = internal.stall ## internal.irq
+  val stateSelect = stall ## internal.irq
   val instr = stateSelect.mux(B"b00" -> internal.memInstr,                                   // Normal mode
                               B"b01" -> B"b010" ## internal.intVec.resize(cfg.wordSize - 3), // Interrupt mode
                               B"b10" -> J1Config.instrNOP(cfg.wordSize),                     // Stall mode
@@ -63,7 +67,7 @@ class J1Core(cfg : J1Config) extends Component {
   // Create the data stack
   val dStack     = J1DStack(cfg)
   val dtosN      = Bits(cfg.wordSize bits)
-  val dStackInfo = dStack(internal.stall, dtosN)
+  val dStackInfo = dStack(stall, dtosN)
   val dtos       = dStackInfo._1
   val dnos       = dStackInfo._2
   val dStackPtr  = dStackInfo._3
@@ -73,11 +77,19 @@ class J1Core(cfg : J1Config) extends Component {
 
   // Create the return stack
   val rStack = J1RStack(cfg)
-  val rtos   = rStack(internal.stall, rtosN)
+  val rtos   = rStack(stall, rtosN)
 
   // Create an ALU (the AluOp is taken out of the instruction)
   val alu = J1Alu(cfg)
-  val aluResult = alu(instr, dtos, dnos, dStackPtr, rtos, internal.toRead)
+  val aluResult = alu(instr, dtos, dnos, dStackPtr, rtos, internal.toRead, mulUnit)
+
+  // Mnozenie / MAC: wydanie z wykonywanej instrukcji, blokada z instrukcji z pamieci
+  if (cfg.hasMul) {
+    mulUnit.build(instr, pc.msb, dtos, dnos)
+    stall := internal.stall || mulUnit.interlock(internal.memInstr, pc.msb)
+  } else {
+    stall := internal.stall
+  }
 
   // Decode instruction and calculate next top of data stack
   dtosN := J1Decoder(cfg)(pc, instr, dtos, dnos, aluResult)
@@ -104,7 +116,7 @@ class J1Core(cfg : J1Config) extends Component {
   rStack.updateRStack(pc.msb, instr, funcTtoR)
 
   // Create the PC update logic
-  pcN := pcObj.updatePC(stall     = internal.stall,
+  pcN := pcObj.updatePC(stall     = stall,
                         clrActive = clrActive,
                         instr     = instr,
                         dtos      = dtos,

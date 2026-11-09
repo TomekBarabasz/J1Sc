@@ -40,25 +40,38 @@ Forthem, UART, timery, PWM, LED-y, przyciski, JTAG) — 2 009 / 5 280 LC, 18 / 3
 `src/main/xilinx/mimasv2/`. Terminal/loader dla PC: `toolchain/forth/j1term.py` (Python 3).
 Test end-to-end w symulacji: `sbt "boards/testOnly j1sc.boards.J1MimasV2SocTest"`.
 
-## Mnożenie sprzętowe (DSP), `J1Config.hasMul`
-Opcjonalne operacje ALU na **bicie 12** instrukcji ALU (w upstreamie nieużywanym):
+## Mnożenie i MAC na DSP48A1, `J1Config.hasMul`
+Operacje rozszerzone na **bicie 12** instrukcji ALU (w upstreamie nieużywanym), kod w bitach 11..8.
+Dwa niezależne kanały (`J1MulUnit.scala`), każdy w osobnym DSP48A1: **P0** (32 b) dla `*`, `um*`,
+`m*` — jądro Fortha używa go samo (parsowanie liczb), więc nie może dzielić rejestru z MAC — i **P1**
+(48 b), akumulator MAC.
 
-| Kod (alu) | Nazwa | Wynik |
+| Kod (alu) | Nazwa | Działanie |
 | --- | --- | --- |
-| `0x1000` | `N*T` | młodsze 16 b iloczynu N × T |
-| `0x1100` | `N*Th` | starsze 16 b iloczynu bez znaku |
+| `0x1000` / `0x1100` | `mul` / `muls` | P0 := N × T bez znaku / ze znakiem; ALU: T := N |
+| `0x1200` / `0x1300` | `mul@` / `mul@h` | T := P0[15:0] / push P0[31:16] |
+| `0x1400` / `0x1500` | `mac` / `macs` | P1 += N × T bez znaku / ze znakiem; ALU: T := N |
+| `0x1600` | `acc!` | P1 := N × T |
+| `0x1800` / `0x1900` / `0x1a00` | `acc@` / `acc@h` / `acc@x` | P1[15:0] / [31:16] / [47:32] |
 
-Jeden mnożnik 16 × 16 (`J1Alu.scala`, kombinacyjny, w tym samym takcie co reszta ALU);
-XST / yosys mapują go na **jeden DSP48A1** (+ ok. 40 LUT na multiplekser wyniku).
-`hasMul = false` (domyślnie): bit 12 ignorowany, ISA bit w bit jak w upstreamie.
+Potok jak w DSP48A1: A/B → M → P (wynik po 3 taktach), mnożenia co takt. **Odczyt P przy
+niepustym potoku wstrzymuje rdzeń** przez `stall` (PC stoi, instrukcja wraca z pamięci) — bez NOP-ów.
+Mnożnik nie leży na ścieżce jednego taktu ALU. `hasMul = false`: bit 12 ignorowany, ISA jak w upstreamie.
 
-Forth: `toolchain/forth/basewords-mul.fs` (`mul-lo`, `mul-hi`, `hwmul`) i `hwmul [if]` w `nuc.fs`
-— `*` = jedna instrukcja, `um*` = 7 instrukcji zamiast 16 kroków `mulstep`. `make` buduje oba obrazy:
-`build/16bit/nuc.binary` (bez zmian) i `nuc-mul.binary`. Konfiguracja: `J1Config.forth16Mul`
-(= `forth16` + `hasMul` + `nuc-mul.binary`); generator Mimasa: `sbt "boards/runMain j1sc.boards.J1MimasV2 mul"`.
-Testy: `J1IsaTest` (wartości brzegowe, losowe pary, bit 12 bez `hasMul`), `J1MimasV2SocTest`
-(`*`, `um*`, `m*` na obu jądrach). Timing: mnożnik bez rejestrów leży na ścieżce jednego taktu ALU —
-przy wyższych zegarach (eksperyment 100 MHz) może być ścieżką krytyczną; sprawdzić w `.twr`.
+`J1Config.mulDsp48a1`: `true` = prymityw DSP48A1 (Spartan-6; rejestry A1/B1, M, OPMODE i P oraz
+sumator akumulatora w bloku DSP), `false` = wersja behawioralna (dowolne FPGA). Symulacja prymitywu
+potrzebuje modelu `j1/hw/sim/DSP48A1.v` (kopia z fpga-hw-lib, `SimConfig.addRtl`).
+
+Forth: `toolchain/forth/basewords-mul.fs` (makra `dsp-*`, `hwmul`) i `hwmul [if]` w `nuc.fs`:
+`*` = 2 instrukcje, `um*` / `m*` = 3, plus słowa MAC `acc0 acc! mac macs acc@ acc@x`
+(`acc@` ( -- d ) = P1[31:0]). `make` buduje `nuc.binary` (bajt w bajt bez zmian) i `nuc-mul.binary`.
+Konfiguracja: `J1Config.forth16Mul`; generator Mimasa: `sbt "boards/runMain j1sc.boards.J1MimasV2 mul"`
+(= `forth16Mul` + `mulDsp48a1`).
+
+Testy: `J1IsaTest` (oba warianty kanału: brzegowe mul, losowe mac/macs vs akumulator 48 b w Scali,
+mac co takt, mul między mac nie rusza P1, bit 12 bez `hasMul`), `J1MimasV2SocTest` (`*`, `um*`, `m*`
+na obu jądrach; `acc0 mac macs acc@ acc@x acc!` przez UART na prymitywie z modelem).
+yosys xc6s (`J1MimasV2`): bez mnożenia 745 LUT / 461 FF; z `mul` (prymityw) 935 LUT / 476 FF / 2 DSP48A1.
 
 ## Jako submodule
 ```

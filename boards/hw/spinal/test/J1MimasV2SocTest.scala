@@ -18,13 +18,17 @@ class J1MimasV2SocTest extends AnyFunSuite {
   val baud   = 625000
   val bitCyc = (freq / baud).toInt
 
-  def compileSoc(name : String, j1 : => J1Config) = SimConfig
-    .withConfig(SpinalConfig(defaultConfigForClockDomains = J1MimasV2.globalClockConfig,
-                             defaultClockDomainFrequency  = FixedFrequency(50 MHz)))
-    .withVerilator.workspacePath("simWorkspace").workspaceName(name)
-    .compile(new J1MimasV2Soc(j1, CoreConfig.mimasV2(baud)))
+  def compileSoc(name : String, j1 : => J1Config, rtl : Seq[String] = Nil) = {
+    val sc = SimConfig
+      .withConfig(SpinalConfig(defaultConfigForClockDomains = J1MimasV2.globalClockConfig,
+                               defaultClockDomainFrequency  = FixedFrequency(50 MHz)))
+      .withVerilator.workspacePath("simWorkspace").workspaceName(name)
+    rtl.foldLeft(sc)(_.addRtl(_)).compile(new J1MimasV2Soc(j1, CoreConfig.mimasV2(baud)))
+  }
   lazy val compiled    = compileSoc("j1mimasv2_soc", J1Config.forth16)
-  lazy val compiledMul = compileSoc("j1mimasv2_soc_mul", J1Config.forth16Mul)    // mnozenie na DSP, nuc-mul.binary
+  // jak na plytce (J1MimasV2.j1FromArgs("mul")): J1MulUnit na prymitywach DSP48A1 + model, nuc-mul.binary
+  lazy val compiledMul = compileSoc("j1mimasv2_soc_mul", J1MimasV2.j1FromArgs(Array("mul")),
+                                    Seq(sys.env.getOrElse("J1SCBASE", "..") + "/j1/hw/sim/DSP48A1.v"))
 
   /** Starts the SoC, returns (send line, received text so far). */
   def session(dips : Int, sim : => SimCompiled[J1MimasV2Soc] = compiled)(body : (J1MimasV2Soc, String => Unit, () => String) => Unit) : Unit =
@@ -179,4 +183,20 @@ class J1MimasV2SocTest extends AnyFunSuite {
         }
       }
     }
+
+  // MAC (tylko forth16Mul): akumulator 48 b w DSP48A1; acc@ = P[31:0] jako (lo hi), acc@x = P[47:32]
+  val macCases = Seq(
+    "acc0 3 4 mac 5 6 mac acc@ .x .x"                    -> "0000 002A ",       // 12 + 30 = 42
+    "acc0 -3 4 macs 2 5 macs acc@ .x .x"                 -> "FFFF FFFE ",       // -12 + 10 = -2
+    "acc0 -1 -1 mac -1 -1 mac acc@x .x acc@ .x .x"       -> "0001 FFFC 0002 ",  // 2 * 0xFFFE0001 = 0x1FFFC0002
+    "7 9 acc! acc@ .x .x"                                -> "0000 003F ")       // acc! laduje P
+  test("MAC, forth16Mul (DSP): acc0, mac, macs, acc@, acc@x, acc!") {
+    session(dips = 0, sim = compiledMul) { (d, send, rx) =>
+      for ((cmd, want) <- macCases) {
+        val before = rx().length
+        send(cmd)
+        waitFor(() => rx().drop(before).toUpperCase, want, d.clockDomain)
+      }
+    }
+  }
 }

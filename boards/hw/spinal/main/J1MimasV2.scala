@@ -166,9 +166,10 @@ object J1MimasV2 {
   /** UART rate from the generator arguments: first number, none = 115200 (jimmo PIC firmware), "19200" = factory. */
   def baudFromArgs(args : Array[String]) : Int = args.find(_.forall(_.isDigit)).map(_.toInt).getOrElse(115200)
 
-  /** CPU configuration from the generator arguments: "mul" = forth16Mul (hardware multiply on a DSP48A1,
-    * nuc-mul.binary), otherwise forth16. */
-  def j1FromArgs(args : Array[String]) : J1Config = if (args.contains("mul")) J1Config.forth16Mul else J1Config.forth16
+  /** CPU configuration from the generator arguments: "mul" = forth16Mul with J1MulUnit on two DSP48A1
+    * primitives (mul + MAC, registers inside the DSP; nuc-mul.binary), otherwise forth16. */
+  def j1FromArgs(args : Array[String]) : J1Config =
+    if (args.contains("mul")) J1Config.forth16Mul.copy(mulDsp48a1 = true) else J1Config.forth16
 
   def main(args : Array[String]) : Unit = {
     val baud = baudFromArgs(args)

@@ -73,11 +73,18 @@ hex
 mirror
 ```
 
-## Mnożenie sprzętowe (opcja)
+## Mnożenie i MAC na DSP (opcja)
 `sbt "boards/runMain j1sc.boards.J1MimasV2 mul"` (można łączyć z prędkością: `19200 mul`) buduje
-J1 z `J1Config.forth16Mul`: ALU liczy `N*T` / `N*Th` na jednym DSP48A1, a jądro
-`nuc-mul.binary` ma `*` i `um*` na tych instrukcjach. Wymaga `make` w `toolchain/forth`
-(buduje oba obrazy). Z Fortha nic się nie zmienia — `*`, `um*`, `m*` działają tak samo, szybciej.
+J1 z `J1MulUnit` na dwóch prymitywach DSP48A1 i jądrem `nuc-mul.binary` (`make` w
+`toolchain/forth` buduje oba obrazy). `*`, `um*`, `m*` działają tak samo, szybciej; dochodzi MAC
+z akumulatorem 48 b:
+```
+acc0  3 4 mac  5 6 mac  acc@ d.      \ 42   (po wgraniu swapforth.fs; jądro: acc@ .x .x)
+acc0  -3 4 macs  2 5 macs  acc@ d.   \ -2
+acc@x .                              \ bity 47..32 akumulatora
+7 9 acc!                             \ akumulator := 63
+```
+Szczegóły kodowania i potoku: `NEWHOPE.md`.
 
 ## Gdy coś nie działa
 - **`mimas>` w terminalu** — to konsola PIC-a (programator flash), nie FPGA. Firmware

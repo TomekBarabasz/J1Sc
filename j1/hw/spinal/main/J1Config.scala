@@ -247,7 +247,10 @@ case class J1Config (wordSize            : Int,
                      bootCode            : () => List[Bits],
                      // Mnozenie sprzetowe (DSP): operacje ALU N*T i N*Th na bicie 12 instrukcji ALU.
                      // false = ISA jak w upstreamie (bit 12 ignorowany). Patrz J1Alu.
-                     hasMul              : Boolean = false)
+                     hasMul              : Boolean = false,
+                     // Kanaly J1MulUnit na prymitywie DSP48A1 (tylko Spartan-6; rejestry A/B, M,
+                     // OPMODE i P w bloku DSP). false = wersja behawioralna (dowolne FPGA).
+                     mulDsp48a1          : Boolean = false)
 
 // Holds some convenience functions for configuring a J1
 object J1Config {

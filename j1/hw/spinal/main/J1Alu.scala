@@ -15,24 +15,11 @@ case class J1Alu(cfg : J1Config) {
   // Slice the ALU operation out of an instruction
   private def getALUOp(instr : Bits) = instr((instr.high - 4) downto ((instr.high - 8) + 1))
 
-  // Bit 12 instrukcji ALU (nieuzywany w upstreamie): rozszerzone operacje przy cfg.hasMul
-  private def isExtOp(instr : Bits) = instr(instr.high - 3)
-
-  // Create and execute a ALU operation
-  def apply(instr : Bits, dtos : Bits, dnos : Bits, dStackPtr : UInt, rtos : Bits, toRead : Bits) : Bits = {
+  // Create and execute a ALU operation (mul != null: operacje rozszerzone z J1MulUnit)
+  def apply(instr : Bits, dtos : Bits, dnos : Bits, dStackPtr : UInt, rtos : Bits, toRead : Bits,
+            mul : J1MulUnit = null) : Bits = {
     val base = baseOps(instr, dtos, dnos, dStackPtr, rtos, toRead)
-    if (!cfg.hasMul) base else {
-      // Mnozenie 16 x 16 bez znaku -> 32 b, kombinacyjne w tym samym takcie co reszta ALU.
-      // XST / yosys wnioskuja z tego jeden DSP48A1 (18 x 18 ze znakiem, argumenty rozszerzone zerami).
-      //   0x1000 N*T  : mlodsze 16 b iloczynu (do *)
-      //   0x1100 N*Th : starsze 16 b iloczynu bez znaku (do um*)
-      // Pozostale kody z bitem 12 dzialaja jak bez niego (zarezerwowane).
-      val product = (dnos.asUInt * dtos.asUInt).setName("aluProduct")
-      product.addAttribute("use_dsp48", "yes")
-      val op = getALUOp(instr)
-      Mux(isExtOp(instr) && op === B"0000", product(cfg.wordSize - 1 downto 0).asBits,
-      Mux(isExtOp(instr) && op === B"0001", product(2 * cfg.wordSize - 1 downto cfg.wordSize).asBits, base))
-    }
+    if (mul == null) base else mul.aluResult(instr, dnos, base)
   }
 
   private def baseOps(instr : Bits, dtos : Bits, dnos : Bits, dStackPtr : UInt, rtos : Bits, toRead : Bits) : Bits = {

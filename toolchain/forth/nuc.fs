@@ -330,15 +330,46 @@ header d2*
 ;
 
 hwmul [if]
-\ mnozenie sprzetowe (basewords-mul.fs, J1Config.hasMul): N*T / N*Th na DSP
+\ mnozenie / MAC na DSP48A1 (basewords-mul.fs, J1Config.hasMul):
+\ *, um*, m* na kanale P0; acc0 acc! mac macs acc@ acc@x na akumulatorze MAC P1 (48 b)
 header um*
 : um*  ( u1 u2 -- ud )
-    over over mul-lo >r mul-hi r> swap
+    dsp-mul dsp-mul@ dsp-mul@h
 ;
 
 header *
 : *
-    mul-lo
+    dsp-mul dsp-mul@
+;
+
+header acc0   \ ( -- )        P := 0
+: acc0
+    d# 0 d# 0 dsp-acc! drop drop
+;
+
+header acc!   \ ( u1 u2 -- )  P := u1*u2
+: acc!
+    dsp-acc! drop
+;
+
+header mac    \ ( u1 u2 -- )  P += u1*u2 bez znaku
+: mac
+    dsp-mac drop
+;
+
+header macs   \ ( n1 n2 -- )  P += n1*n2 ze znakiem
+: macs
+    dsp-macs drop
+;
+
+header acc@   \ ( -- d )      P[31:0] jako liczba podwojna
+: acc@
+    dup dsp-acc@ dsp-acc@h
+;
+
+header acc@x  \ ( -- x )      P[47:32]
+: acc@x
+    dsp-acc@x
 ;
 
 [else]
@@ -385,12 +416,19 @@ header *
 
 [then]
 
+hwmul [if]
+header m*
+: m*  ( n1 n2 -- d )
+    dsp-muls dsp-mul@ dsp-mul@h
+;
+[else]
 header m*
 : m*
     2dupxor >r
     abs swap abs um*
     r> ?dneg
 ;
+[then]
 
 \ see Hacker's Delight (2nd ed) 9-4 "Unsigned Long Division"
 
