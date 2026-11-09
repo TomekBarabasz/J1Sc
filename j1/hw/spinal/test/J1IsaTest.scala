@@ -20,10 +20,17 @@ object J1IsaTest {
   val pop       = 0x6103
   val ret       = 0x608C
   val nop       = 0x6000
+  val invert    = 0x6600   // ~T
+  val over      = 0x6111   // N T->N d+1
+  val mulLo     = 0x7003   // N*T  (bit 12, op 0000), d-1
+  val mulHi     = 0x7103   // N*Th (bit 12, op 0001), d-1
+
+  /** Wypchniecie dowolnej wartosci 16 b: literal ma 15 b, wieksze przez ~T. */
+  def lit(v : Int) : Seq[Int] = if ((v & 0x8000) == 0) Seq(push(v)) else Seq(push(~v & 0x7FFF), invert)
 
   val adrWidth = 8
 
-  def cfg(prog : Seq[Int]) = J1Config(
+  def cfg(prog : Seq[Int], hasMul : Boolean = false) = J1Config(
     wordSize            = 16,
     dataStackIdxWidth   = 5,
     returnStackIdxWidth = 4,
@@ -34,7 +41,8 @@ object J1IsaTest {
     adrWidth            = adrWidth,
     numOfRAMs           = 2,
     startAddress        = 0,
-    bootCode            = () => (prog ++ Seq.fill((1 << adrWidth) - prog.size)(0)).map(B(_, 16 bits)).toList)
+    bootCode            = () => (prog ++ Seq.fill((1 << adrWidth) - prog.size)(0)).map(B(_, 16 bits)).toList,
+    hasMul              = hasMul)
 
   val spinal = SpinalConfig(defaultConfigForClockDomains =
     ClockDomainConfig(clockEdge = RISING, resetKind = SYNC, resetActiveLevel = HIGH))
@@ -44,10 +52,10 @@ class J1IsaTest extends AnyFunSuite {
   import J1IsaTest._
 
   /** Uruchamia program, zwraca zapisy I/O (adres, dane). readData = ioIn. */
-  def ioWrites(name : String, prog : Seq[Int], ioIn : Int = 0, cycles : Int = 200) : Seq[(Int, Int)] = {
+  def ioWrites(name : String, prog : Seq[Int], ioIn : Int = 0, cycles : Int = 200, hasMul : Boolean = false) : Seq[(Int, Int)] = {
     var writes = Vector.empty[(Int, Int)]
     SimConfig.withConfig(spinal).withVerilator.workspacePath("simWorkspace").workspaceName(name)
-      .compile(new J1(cfg(prog))).doSim(name) { d =>
+      .compile(new J1(cfg(prog, hasMul))).doSim(name) { d =>
         d.internal.stall  #= false
         d.internal.irq    #= false
         d.internal.intVec #= 0
@@ -86,5 +94,34 @@ class J1IsaTest extends AnyFunSuite {
   test("odczyt I/O -> zapis I/O") {
     val prog = Seq(push(0x43), ioRd, ioRd, push(0x44), ioWrNip, pop, jmp(6))
     assert(ioWrites("isa_ioread", prog, ioIn = 0x1234) == Seq(0x44 -> 0x1234))
+  }
+
+  // ---- mnozenie sprzetowe (J1Config.hasMul, bit 12 instrukcji ALU) ------------------
+  /** Program: dla kazdej pary (a, b) zapis lo pod 0x40 i hi pod 0x41, na koncu petla. */
+  def mulProgram(pairs : Seq[(Int, Int)]) : Seq[Int] = {
+    val body = pairs.flatMap { case (a, b) =>
+      lit(a) ++ lit(b) ++ Seq(over, over, mulLo, push(0x40), ioWrNip, pop,     // (a b) -> lo -> io[40]
+                              mulHi, push(0x41), ioWrNip, pop)                  // (a b) -> hi -> io[41]
+    }
+    body :+ jmp(body.size)
+  }
+  def mulExpected(pairs : Seq[(Int, Int)]) : Seq[(Int, Int)] =
+    pairs.flatMap { case (a, b) => val p = a.toLong * b.toLong; Seq(0x40 -> (p & 0xFFFF).toInt, 0x41 -> ((p >> 16) & 0xFFFF).toInt) }
+
+  test("mul: N*T i N*Th, wartosci brzegowe") {
+    val pairs = Seq((300, 7), (0xFFFF, 0xFFFF), (0x8000, 2), (0, 0x1234), (0x1234, 0x5678))
+    assert(ioWrites("isa_mul_edge", mulProgram(pairs), cycles = 400, hasMul = true) == mulExpected(pairs))
+  }
+
+  test("mul: losowe pary vs iloczyn w Scali") {
+    val rng   = new scala.util.Random(16)
+    val pairs = Seq.fill(12)((rng.nextInt(0x10000), rng.nextInt(0x10000)))
+    assert(ioWrites("isa_mul_rand", mulProgram(pairs), cycles = 900, hasMul = true) == mulExpected(pairs))
+  }
+
+  test("bez hasMul bit 12 jest ignorowany (ISA jak w upstreamie)") {
+    // 0x7003 = op T z d-1 (nip): (300 7) -> 7
+    val prog = Seq(push(300), push(7), mulLo, push(0x40), ioWrNip, pop, jmp(6))
+    assert(ioWrites("isa_mul_off", prog) == Seq(0x40 -> 7))
   }
 }

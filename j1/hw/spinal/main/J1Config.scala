@@ -244,7 +244,10 @@ case class J1Config (wordSize            : Int,
                      adrWidth            : Int,
                      numOfRAMs           : Int,
                      startAddress        : Int,
-                     bootCode            : () => List[Bits])
+                     bootCode            : () => List[Bits],
+                     // Mnozenie sprzetowe (DSP): operacje ALU N*T i N*Th na bicie 12 instrukcji ALU.
+                     // false = ISA jak w upstreamie (bit 12 ignorowany). Patrz J1Alu.
+                     hasMul              : Boolean = false)
 
 // Holds some convenience functions for configuring a J1
 object J1Config {
@@ -256,7 +259,7 @@ object J1Config {
   def hexToBits(s : String, w : Int) = {B(s.toList.map("0123456789ABCDEF".indexOf(_)).reduceLeft(_ * 16 + _), w bits)}
 
   // Provide the SwapForth base system
-  def forthBase(w : Int) = {
+  def forthBase(w : Int, image : String = "nuc") = {
 
     // Get the environment
     val j1Env = envOrElse("J1SCBASE","")
@@ -265,12 +268,12 @@ object J1Config {
     val forthPath = if (j1Env == "") {
 
       // Relative path
-      "toolchain/forth/build/" + w + "bit/nuc.binary"
+      "toolchain/forth/build/" + w + "bit/" + image + ".binary"
 
     } else {
 
       // Use the J1Sc base to build the path
-      j1Env + "/toolchain/forth/build/" + w + "bit/nuc.binary"
+      j1Env + "/toolchain/forth/build/" + w + "bit/" + image + ".binary"
 
     }
 
@@ -686,5 +689,14 @@ object J1Config {
     config
 
   }
+  // forth16 z mnozeniem sprzetowym: ALU N*T / N*Th (jeden DSP48A1 na Spartanie-6)
+  // i jadro toolchain/forth/build/16bit/nuc-mul.binary (* i um* na tych instrukcjach)
+  def forth16Mul = {
+    val base = forth16
+    def baseSystem = forthBase(base.wordSize, "nuc-mul").take((1 << base.adrWidth) - base.irqConfig.numOfInterrupts)
+    base.copy(hasMul   = true,
+              bootCode = () => baseSystem ++ List.fill((1 << base.adrWidth) - baseSystem.length)(B(0, base.wordSize bits)))
+  }
+
 
 }

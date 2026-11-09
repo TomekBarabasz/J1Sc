@@ -18,15 +18,17 @@ class J1MimasV2SocTest extends AnyFunSuite {
   val baud   = 625000
   val bitCyc = (freq / baud).toInt
 
-  lazy val compiled = SimConfig
+  def compileSoc(name : String, j1 : => J1Config) = SimConfig
     .withConfig(SpinalConfig(defaultConfigForClockDomains = J1MimasV2.globalClockConfig,
                              defaultClockDomainFrequency  = FixedFrequency(50 MHz)))
-    .withVerilator.workspacePath("simWorkspace").workspaceName("j1mimasv2_soc")
-    .compile(new J1MimasV2Soc(J1Config.forth16, CoreConfig.mimasV2(baud)))
+    .withVerilator.workspacePath("simWorkspace").workspaceName(name)
+    .compile(new J1MimasV2Soc(j1, CoreConfig.mimasV2(baud)))
+  lazy val compiled    = compileSoc("j1mimasv2_soc", J1Config.forth16)
+  lazy val compiledMul = compileSoc("j1mimasv2_soc_mul", J1Config.forth16Mul)    // mnozenie na DSP, nuc-mul.binary
 
   /** Starts the SoC, returns (send line, received text so far). */
-  def session(dips : Int)(body : (J1MimasV2Soc, String => Unit, () => String) => Unit) : Unit =
-    compiled.doSim { d =>
+  def session(dips : Int, sim : => SimCompiled[J1MimasV2Soc] = compiled)(body : (J1MimasV2Soc, String => Unit, () => String) => Unit) : Unit =
+    sim.doSim { d =>
       val cd = d.clockDomain
       d.io.dips    #= dips
       d.io.buttons #= 0
@@ -159,4 +161,22 @@ class J1MimasV2SocTest extends AnyFunSuite {
         waitFor(() => rx.toString.toUpperCase, "0003 ", cd, maxCycles = 2000000)
       }
   }
+
+  // Mnozenie: te same polecenia na jadrze programowym (forth16) i sprzetowym (forth16Mul, DSP).
+  // Jadro drukuje hex (.x); um* zostawia (lo hi), wiec .x .x drukuje najpierw hi.
+  val mulCases = Seq(
+    "300 7 * .x"      -> "0834 ",                   // 2100
+    "-1 -1 um* .x .x" -> "FFFE 0001 ",              // 0xFFFF * 0xFFFF = 0xFFFE0001
+    "-3 7 m* .x .x"   -> "FFFF FFEB ",              // -21 ze znakiem (m* przez um*)
+    "4660 22136 * .x" -> "0060 ")                   // 0x1234 * 0x5678 = 0x06260060
+  for ((name, sim) <- Seq("forth16 (programowo)" -> (() => compiled), "forth16Mul (DSP)" -> (() => compiledMul)))
+    test(s"mnozenie, $name: *, um*, m*") {
+      session(dips = 0, sim = sim()) { (d, send, rx) =>
+        for ((cmd, want) <- mulCases) {
+          val before = rx().length
+          send(cmd)
+          waitFor(() => rx().drop(before).toUpperCase, want, d.clockDomain)
+        }
+      }
+    }
 }

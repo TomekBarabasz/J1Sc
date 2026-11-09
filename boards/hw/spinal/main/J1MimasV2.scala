@@ -20,6 +20,7 @@ import spinal.lib.com.uart._
 //
 //    sbt "boards/runMain j1sc.boards.J1MimasV2"          (115200)
 //    sbt "boards/runMain j1sc.boards.J1MimasV2 19200"    (factory PIC firmware)
+//    sbt "boards/runMain j1sc.boards.J1MimasV2 mul"      (hardware multiply: J1Config.forth16Mul)
 //    -> gen/src/verilog/J1MimasV2.v + J1MimasV2.v_toplevel_*.bin (RAM image)
 //    UCF: src/main/xilinx/mimasv2/J1MimasV2.ucf
 // =====================================================================
@@ -162,17 +163,22 @@ object J1MimasV2 {
     cd
   }
 
-  /** UART rate from the generator arguments: none = 115200 (jimmo PIC firmware), "19200" = factory. */
-  def baudFromArgs(args : Array[String]) : Int = args.headOption.map(_.toInt).getOrElse(115200)
+  /** UART rate from the generator arguments: first number, none = 115200 (jimmo PIC firmware), "19200" = factory. */
+  def baudFromArgs(args : Array[String]) : Int = args.find(_.forall(_.isDigit)).map(_.toInt).getOrElse(115200)
+
+  /** CPU configuration from the generator arguments: "mul" = forth16Mul (hardware multiply on a DSP48A1,
+    * nuc-mul.binary), otherwise forth16. */
+  def j1FromArgs(args : Array[String]) : J1Config = if (args.contains("mul")) J1Config.forth16Mul else J1Config.forth16
 
   def main(args : Array[String]) : Unit = {
     val baud = baudFromArgs(args)
-    println(s"[J1Sc] Create the J1 for a Numato Mimas V2 board, UART $baud baud")
+    val j1   = j1FromArgs(args)
+    println(s"[J1Sc] Create the J1 for a Numato Mimas V2 board, UART $baud baud, hardware multiply: ${j1.hasMul}")
     val dir = "gen/src/verilog"
     SpinalConfig(mergeAsyncProcess            = true,
                  defaultConfigForClockDomains = globalClockConfig,
                  targetDirectory              = dir)
-      .generateVerilog(new J1MimasV2(J1Config.forth16, CoreConfig.mimasV2(baud)))
+      .generateVerilog(new J1MimasV2(j1, CoreConfig.mimasV2(baud)))
       .printPruned()
     InlineReadmem(s"$dir/J1MimasV2.v")
   }

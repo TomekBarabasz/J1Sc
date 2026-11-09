@@ -40,6 +40,26 @@ Forthem, UART, timery, PWM, LED-y, przyciski, JTAG) — 2 009 / 5 280 LC, 18 / 3
 `src/main/xilinx/mimasv2/`. Terminal/loader dla PC: `toolchain/forth/j1term.py` (Python 3).
 Test end-to-end w symulacji: `sbt "boards/testOnly j1sc.boards.J1MimasV2SocTest"`.
 
+## Mnożenie sprzętowe (DSP), `J1Config.hasMul`
+Opcjonalne operacje ALU na **bicie 12** instrukcji ALU (w upstreamie nieużywanym):
+
+| Kod (alu) | Nazwa | Wynik |
+| --- | --- | --- |
+| `0x1000` | `N*T` | młodsze 16 b iloczynu N × T |
+| `0x1100` | `N*Th` | starsze 16 b iloczynu bez znaku |
+
+Jeden mnożnik 16 × 16 (`J1Alu.scala`, kombinacyjny, w tym samym takcie co reszta ALU);
+XST / yosys mapują go na **jeden DSP48A1** (+ ok. 40 LUT na multiplekser wyniku).
+`hasMul = false` (domyślnie): bit 12 ignorowany, ISA bit w bit jak w upstreamie.
+
+Forth: `toolchain/forth/basewords-mul.fs` (`mul-lo`, `mul-hi`, `hwmul`) i `hwmul [if]` w `nuc.fs`
+— `*` = jedna instrukcja, `um*` = 7 instrukcji zamiast 16 kroków `mulstep`. `make` buduje oba obrazy:
+`build/16bit/nuc.binary` (bez zmian) i `nuc-mul.binary`. Konfiguracja: `J1Config.forth16Mul`
+(= `forth16` + `hasMul` + `nuc-mul.binary`); generator Mimasa: `sbt "boards/runMain j1sc.boards.J1MimasV2 mul"`.
+Testy: `J1IsaTest` (wartości brzegowe, losowe pary, bit 12 bez `hasMul`), `J1MimasV2SocTest`
+(`*`, `um*`, `m*` na obu jądrach). Timing: mnożnik bez rejestrów leży na ścieżce jednego taktu ALU —
+przy wyższych zegarach (eksperyment 100 MHz) może być ścieżką krytyczną; sprawdzić w `.twr`.
+
 ## Jako submodule
 ```
 git submodule add -b newhope https://github.com/TomekBarabasz/J1Sc hw/cpu/j1

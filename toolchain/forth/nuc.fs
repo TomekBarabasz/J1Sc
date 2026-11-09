@@ -329,6 +329,19 @@ header d2*
     2* over d# 0 < d# 1 and + swap 2* swap
 ;
 
+hwmul [if]
+\ mnozenie sprzetowe (basewords-mul.fs, J1Config.hasMul): N*T / N*Th na DSP
+header um*
+: um*  ( u1 u2 -- ud )
+    over over mul-lo >r mul-hi r> swap
+;
+
+header *
+: *
+    mul-lo
+;
+
+[else]
 : mulstep ( ud u1 -- ud u1 )
     DOUBLE DOUBLE
     >r
@@ -369,6 +382,8 @@ header *
 : *
     um* drop
 ;
+
+[then]
 
 header m*
 : m*

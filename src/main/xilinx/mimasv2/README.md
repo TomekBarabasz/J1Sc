@@ -73,6 +73,12 @@ hex
 mirror
 ```
 
+## Mnożenie sprzętowe (opcja)
+`sbt "boards/runMain j1sc.boards.J1MimasV2 mul"` (można łączyć z prędkością: `19200 mul`) buduje
+J1 z `J1Config.forth16Mul`: ALU liczy `N*T` / `N*Th` na jednym DSP48A1, a jądro
+`nuc-mul.binary` ma `*` i `um*` na tych instrukcjach. Wymaga `make` w `toolchain/forth`
+(buduje oba obrazy). Z Fortha nic się nie zmienia — `*`, `um*`, `m*` działają tak samo, szybciej.
+
 ## Gdy coś nie działa
 - **`mimas>` w terminalu** — to konsola PIC-a (programator flash), nie FPGA. Firmware
   jimmo: weź **drugi** port COM płytki. Fabryczny: przestaw SW7 na UART.
