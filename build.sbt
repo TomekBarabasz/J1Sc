@@ -12,7 +12,7 @@
 // kompatybilnosci binarnej). Celowo bez zaleznosci od HwBuild, zeby fork
 // budowal sie bez fpga-hw-lib.
 
-val spinalVersion = "1.12.3"
+val spinalVersion = "1.15.0"
 val spinal = Seq(
   "com.github.spinalhdl" %% "spinalhdl-core" % spinalVersion,
   "com.github.spinalhdl" %% "spinalhdl-lib"  % spinalVersion,

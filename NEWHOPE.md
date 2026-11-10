@@ -7,7 +7,7 @@ Gałąź robocza: `newhope`. Upstream: `git remote add upstream https://github.c
 
 | | upstream | newhope |
 | --- | --- | --- |
-| Scala / SpinalHDL / sbt | 2.11.8 / 1.4.2 / 0.13.16 | 2.13.14 / 1.12.3 / 1.12.4 (jak fpga-hw-lib) |
+| Scala / SpinalHDL / sbt | 2.11.8 / 1.4.2 / 0.13.16 | 2.13.14 / 1.15.0 / 1.12.4 (jak fpga-hw-lib) |
 | pakiet | domyślny | `j1sc` (rdzeń), `j1sc.boards` (płytki) |
 | źródła | `src/main/scala`, `src/test/scala` | `j1/hw/spinal/{main,test}`, `boards/hw/spinal/{main,test}` |
 | projekty sbt | jeden + taski iceGen/icePnr/icoProg/… | `j1`, `boards`, root `j1sc` |
